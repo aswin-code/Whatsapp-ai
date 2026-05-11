@@ -4,6 +4,7 @@ import { parseIncomingMessage, sendMessage } from './whatsapp';
 import { triageMessage } from './brain';
 import { store } from './store';
 import { handleOwnerCommand } from './commands';
+import { contacts } from './contacts';
 
 const app = express();
 app.use(express.json());
@@ -71,19 +72,36 @@ async function processMessage(from: string, text: string): Promise<void> {
 
   // All other senders go through Claude triage
   const history = histories.get(from) ?? [];
-  let triage;
-  try {
-    triage = await triageMessage(from, text, history);
-  } catch (err) {
-    console.error('Claude triage error:', err);
-    await sendMessage(
-      OWNER,
-      `⚠️ Triage error for message from ${from}.\nMessage: "${text}"\nError: ${String(err)}`
+  const contact = contacts.get(from);
+  const contactCtx = contacts.context(from);
+  const contactLabel = contact ? `${contact.name} (${from})` : from;
+
+  // Hard overrides based on contact profile — skip Claude entirely
+  if (contact?.alwaysEscalate) {
+    await sendMessage(OWNER,
+      `🚨 ESCALATE from ${contactLabel}\n\n"${text}"\n\nReason: Always escalate for ${contact.relationship}`
     ).catch(console.error);
     return;
   }
 
-  console.log(`Triage result for ${from}: ${triage.action}`);
+  let triage;
+  try {
+    triage = await triageMessage(from, text, history, contactCtx);
+  } catch (err) {
+    console.error('Claude triage error:', err);
+    await sendMessage(
+      OWNER,
+      `⚠️ Triage error for message from ${contactLabel}.\nMessage: "${text}"\nError: ${String(err)}`
+    ).catch(console.error);
+    return;
+  }
+
+  // Override auto_reply → draft if contact has neverAutoReply set
+  if (contact?.neverAutoReply && triage.action === 'auto_reply') {
+    triage = { ...triage, action: 'draft' };
+  }
+
+  console.log(`Triage result for ${contactLabel}: ${triage.action}`);
 
   switch (triage.action) {
     case 'auto_reply':
@@ -97,8 +115,8 @@ async function processMessage(from: string, text: string): Promise<void> {
       const draft = store.add(from, triage.response ?? '', text);
       await sendMessage(
         OWNER,
-        `📝 Draft #${draft.id} for ${from}\n\n` +
-          `Received:\n"${text}"\n\n` +
+        `📝 Draft #${draft.id} from ${contactLabel}\n\n` +
+          `"${text}"\n\n` +
           `Suggested reply:\n"${draft.suggestedReply}"\n\n` +
           `SEND ${draft.id}  |  EDIT ${draft.id} <text>  |  SKIP ${draft.id}`
       );
@@ -108,8 +126,8 @@ async function processMessage(from: string, text: string): Promise<void> {
     case 'escalate':
       await sendMessage(
         OWNER,
-        `🚨 ESCALATE from ${from}\n\n` +
-          `Message:\n"${text}"\n\n` +
+        `🚨 ESCALATE from ${contactLabel}\n\n` +
+          `"${text}"\n\n` +
           `Reason: ${triage.reason ?? 'Needs your attention'}`
       );
       break;

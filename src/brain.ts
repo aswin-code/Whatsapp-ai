@@ -70,18 +70,20 @@ Output ONLY the reply text. Nothing else.`;
 
 type History = Array<{ role: 'user' | 'bot'; text: string }>;
 
-function buildContext(history: History): string {
-  if (history.length <= 1) return '';
-  // Last 6 turns (excluding the current message which is already in history)
+function buildContext(history: History, contactCtx: string): string {
+  const parts: string[] = [];
+  if (contactCtx) parts.push(`Who is texting: ${contactCtx}`);
   const recent = history.slice(-7, -1);
-  if (recent.length === 0) return '';
-  return '\n\nConversation so far:\n' +
-    recent.map(h => `${h.role === 'user' ? 'Them' : 'You (Aswin)'}: ${h.text}`).join('\n');
+  if (recent.length > 0) {
+    parts.push('Conversation so far:\n' +
+      recent.map(h => `${h.role === 'user' ? 'Them' : 'You (Aswin)'}: ${h.text}`).join('\n'));
+  }
+  return parts.length ? '\n\n' + parts.join('\n\n') : '';
 }
 
 // ── Main export ───────────────────────────────────────────────────────────────
-export async function triageMessage(from: string, body: string, history: History = []): Promise<TriageResult> {
-  const context = buildContext(history);
+export async function triageMessage(from: string, body: string, history: History = [], contactCtx = ''): Promise<TriageResult> {
+  const context = buildContext(history, contactCtx);
 
   // Step 1 — decide action (Haiku, fast)
   const triageRes = await client.messages.create({
