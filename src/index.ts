@@ -9,9 +9,17 @@ const app = express();
 app.use(express.json());
 
 const PORT = process.env.PORT ?? '3000';
-
-// Strip non-digits so "OWNER_NUMBER=+1 555 123 4567" still works
 const OWNER = (process.env.OWNER_NUMBER ?? '').replace(/\D/g, '');
+
+// Keep last 10 messages per sender so the bot understands conversation context
+const histories = new Map<string, Array<{ role: 'user' | 'bot'; text: string }>>();
+
+function addToHistory(from: string, role: 'user' | 'bot', text: string) {
+  const h = histories.get(from) ?? [];
+  h.push({ role, text });
+  if (h.length > 10) h.shift();
+  histories.set(from, h);
+}
 
 // ── Health check ────────────────────────────────────────────────────────────
 app.get('/', (_req: Request, res: Response) => {
@@ -45,6 +53,8 @@ app.post('/webhook', (req: Request, res: Response) => {
   const ts = new Date().toISOString();
   console.log(`[${ts}] Message from ${from}: ${text}`);
 
+  addToHistory(from, 'user', text);
+
   // Process asynchronously so we never block the response
   processMessage(from, text).catch((err) =>
     console.error(`[${ts}] Unhandled error processing message from ${from}:`, err)
@@ -60,9 +70,10 @@ async function processMessage(from: string, text: string): Promise<void> {
   }
 
   // All other senders go through Claude triage
+  const history = histories.get(from) ?? [];
   let triage;
   try {
-    triage = await triageMessage(from, text);
+    triage = await triageMessage(from, text, history);
   } catch (err) {
     console.error('Claude triage error:', err);
     await sendMessage(
@@ -78,6 +89,7 @@ async function processMessage(from: string, text: string): Promise<void> {
     case 'auto_reply':
       if (triage.response) {
         await sendMessage(from, triage.response);
+        addToHistory(from, 'bot', triage.response);
       }
       break;
 
