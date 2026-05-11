@@ -114,9 +114,9 @@ export async function triageMessage(from: string, body: string, history: History
   // Escalate immediately — no reply needed
   if (action === 'escalate') return { action, reason };
 
-  // Step 2 — generate the actual reply (Sonnet, quality)
+  // Step 2 — generate the actual reply (Haiku, low cost)
   const replyRes = await client.messages.create({
-    model: 'claude-sonnet-4-6',
+    model: 'claude-haiku-4-5-20251001',
     max_tokens: 128,
     system: [{ type: 'text', text: REPLY_PROMPT, cache_control: { type: 'ephemeral' } }],
     messages: [{ role: 'user', content: body + context }],
