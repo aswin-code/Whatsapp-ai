@@ -4,21 +4,29 @@ const GRAPH_BASE = 'https://graph.facebook.com/v19.0';
 
 export async function sendMessage(to: string, body: string): Promise<void> {
   const { WHATSAPP_TOKEN, WHATSAPP_PHONE_NUMBER_ID } = process.env;
-  await axios.post(
-    `${GRAPH_BASE}/${WHATSAPP_PHONE_NUMBER_ID}/messages`,
-    {
-      messaging_product: 'whatsapp',
-      to,
-      type: 'text',
-      text: { body },
-    },
-    {
-      headers: {
-        Authorization: `Bearer ${WHATSAPP_TOKEN}`,
-        'Content-Type': 'application/json',
+  try {
+    await axios.post(
+      `${GRAPH_BASE}/${WHATSAPP_PHONE_NUMBER_ID}/messages`,
+      {
+        messaging_product: 'whatsapp',
+        to,
+        type: 'text',
+        text: { body },
       },
+      {
+        headers: {
+          Authorization: `Bearer ${WHATSAPP_TOKEN}`,
+          'Content-Type': 'application/json',
+        },
+      }
+    );
+  } catch (err: unknown) {
+    if (axios.isAxiosError(err)) {
+      const meta = err.response?.data?.error;
+      throw new Error(`Meta API error sending to ${to}: [${meta?.code}] ${meta?.message ?? err.message}`);
     }
-  );
+    throw err;
+  }
 }
 
 export interface ParsedMessage {
