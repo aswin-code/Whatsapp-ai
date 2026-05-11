@@ -22,6 +22,10 @@ function addToHistory(from: string, role: 'user' | 'bot', text: string) {
   histories.set(from, h);
 }
 
+// Talk mode — owner is directly chatting with a specific contact through the bot
+// talkTarget = the contact's number the owner is currently talking to
+let talkTarget: string | null = null;
+
 // ── Health check ────────────────────────────────────────────────────────────
 app.get('/', (_req: Request, res: Response) => {
   res.send('WhatsApp AI bot is running');
@@ -63,10 +67,52 @@ app.post('/webhook', (req: Request, res: Response) => {
 });
 
 async function processMessage(from: string, text: string): Promise<void> {
-  // Owner commands are processed locally — no triage needed
+  // ── Owner messages ──────────────────────────────────────────────────────────
   if (OWNER && from === OWNER) {
+
+    // TALK <name/number> — enter conversation mode
+    const talkMatch = text.trim().match(/^TALK\s+(.+)$/i);
+    if (talkMatch) {
+      const target = talkMatch[1].trim();
+      let number = target.replace(/\D/g, '');
+      if (!number) {
+        const found = contacts.list().find(c => c.name.toLowerCase() === target.toLowerCase());
+        if (!found) { await sendMessage(OWNER, `Contact "${target}" not found.`); return; }
+        number = found.number;
+      }
+      talkTarget = number;
+      const name = contacts.get(number)?.name ?? number;
+      await sendMessage(OWNER, `💬 Talk mode ON — chatting as you with ${name}\nEvery message you send goes to them.\nSend ENDTALK to stop.`);
+      return;
+    }
+
+    // ENDTALK — exit conversation mode
+    if (/^ENDTALK$/i.test(text.trim())) {
+      if (!talkTarget) { await sendMessage(OWNER, 'No active talk session.'); return; }
+      const name = contacts.get(talkTarget)?.name ?? talkTarget;
+      talkTarget = null;
+      await sendMessage(OWNER, `Talk mode OFF — stopped chatting with ${name}`);
+      return;
+    }
+
+    // In talk mode — forward message directly to the contact
+    if (talkTarget) {
+      await sendMessage(talkTarget, text);
+      addToHistory(talkTarget, 'bot', text);
+      return;
+    }
+
+    // Normal owner command
     const reply = await handleOwnerCommand(text);
     await sendMessage(OWNER, reply);
+    return;
+  }
+
+  // If owner is in talk mode with this contact, forward reply directly to owner
+  if (talkTarget === from) {
+    const name = contacts.get(from)?.name ?? from;
+    await sendMessage(OWNER, `💬 ${name}: ${text}`);
+    addToHistory(from, 'user', text);
     return;
   }
 

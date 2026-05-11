@@ -145,7 +145,9 @@ export async function handleOwnerCommand(command: string): Promise<string> {
     '  AUTOREPLY <name/number> ON|OFF — toggle instant replies',
     '',
     'Messaging:',
-    '  MSG <number or name> <text> — send a message',
+    '  MSG <number or name> <text> — send a one-off message',
+    '  TALK <number or name> — enter conversation mode (you type, they receive)',
+    '  ENDTALK — exit conversation mode',
     '',
     'Relationships: close_friend, family, colleague, client, acquaintance',
   ].join('\n');
