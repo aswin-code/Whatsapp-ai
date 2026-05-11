@@ -96,9 +96,13 @@ async function processMessage(from: string, text: string): Promise<void> {
     return;
   }
 
-  // Override auto_reply → draft if contact has neverAutoReply set
+  // Per-contact overrides
   if (contact?.neverAutoReply && triage.action === 'auto_reply') {
     triage = { ...triage, action: 'draft' };
+  }
+  // autoReplyAll: send even drafts without asking, only escalate goes to owner
+  if (contact?.autoReplyAll && triage.action === 'draft') {
+    triage = { ...triage, action: 'auto_reply' };
   }
 
   console.log(`Triage result for ${contactLabel}: ${triage.action}`);
@@ -117,7 +121,7 @@ async function processMessage(from: string, text: string): Promise<void> {
         OWNER,
         `📝 Draft #${draft.id} from ${contactLabel}\n\n` +
           `"${text}"\n\n` +
-          `Suggested reply:\n"${draft.suggestedReply}"\n\n` +
+          `Suggested:\n"${draft.suggestedReply}"\n\n` +
           `SEND ${draft.id}  |  EDIT ${draft.id} <text>  |  SKIP ${draft.id}`
       );
       break;

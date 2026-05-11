@@ -75,7 +75,25 @@ export async function handleOwnerCommand(command: string): Promise<string> {
   if (whoMatch) {
     const c = contacts.get(whoMatch[1]);
     if (!c) return `No contact found for ${whoMatch[1]}.`;
-    return `👤 ${c.name}\nNumber: ${c.number}\nRelationship: ${c.relationship}\nNotes: ${c.notes || '—'}\nAuto-reply: ${c.neverAutoReply ? 'off' : 'on'}\nAlways escalate: ${c.alwaysEscalate ? 'yes' : 'no'}`;
+    const mode = c.alwaysEscalate ? 'always escalate' : c.neverAutoReply ? 'always draft' : c.autoReplyAll ? 'auto reply all' : 'normal';
+    return `👤 ${c.name}\nNumber: ${c.number}\nRelationship: ${c.relationship}\nNotes: ${c.notes || '—'}\nMode: ${mode}`;
+  }
+
+  // AUTOREPLY <number|name> ON|OFF — toggle auto reply all for a contact
+  const arMatch = trimmed.match(/^AUTOREPLY\s+(\S+)\s+(ON|OFF)$/i);
+  if (arMatch) {
+    const target = arMatch[1];
+    const on = arMatch[2].toUpperCase() === 'ON';
+    let number = target.replace(/\D/g, '');
+    if (!number) {
+      const found = contacts.list().find(c => c.name.toLowerCase() === target.toLowerCase());
+      if (!found) return `Contact "${target}" not found.`;
+      number = found.number;
+    }
+    const c = contacts.get(number);
+    if (!c) return `No contact found for ${number}.`;
+    contacts.set({ ...c, autoReplyAll: on, neverAutoReply: on ? false : c.neverAutoReply });
+    return `${c.name}: auto reply ${on ? 'ON ✓ — will reply instantly without asking' : 'OFF — will draft for approval'}`;
   }
 
   // REMOVE <number> — delete a contact
@@ -124,6 +142,7 @@ export async function handleOwnerCommand(command: string): Promise<string> {
     '  CONTACTS — list all contacts',
     '  WHO <number> — view contact profile',
     '  REMOVE <number> — delete contact',
+    '  AUTOREPLY <name/number> ON|OFF — toggle instant replies',
     '',
     'Messaging:',
     '  MSG <number or name> <text> — send a message',

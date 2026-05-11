@@ -7,9 +7,10 @@ export interface Contact {
   number: string;
   name: string;
   relationship: Relationship;
-  notes: string;         // free text: "childhood friend", "my manager", etc.
-  alwaysEscalate: boolean; // e.g. boss, client — never auto-reply
-  neverAutoReply: boolean; // draft everything for review
+  notes: string;
+  alwaysEscalate: boolean;  // always send to owner, no reply
+  neverAutoReply: boolean;  // always draft for approval
+  autoReplyAll: boolean;    // reply everything instantly, no approval needed
 }
 
 const DB_PATH = path.join(__dirname, '..', 'contacts.json');
@@ -82,5 +83,6 @@ export function parseAddCommand(args: string): Contact | string {
     notes: noteParts.join(' '),
     alwaysEscalate: relationship === 'client',
     neverAutoReply: relationship === 'client' || relationship === 'colleague',
+    autoReplyAll: relationship === 'close_friend' || relationship === 'family',
   };
 }
